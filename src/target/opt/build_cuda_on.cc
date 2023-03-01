@@ -228,7 +228,7 @@ runtime::Module BuildCUDALlis(IRModule mod, Target target) {
   }
   const auto* f_exit = Registry::Get("target.TargetExitScope");
   (*f_exit)(target);
-  return CUDAModuleLlisCreate(ptx, fmt, ExtractFuncInfo(mod), code);
+  return CUDALlisModuleCreate(ptx, fmt, ExtractFuncInfo(mod), code);
 }
 
 TVM_REGISTER_GLOBAL("target.build.cuda").set_body_typed(BuildCUDA);

@@ -323,7 +323,7 @@ TVM_REGISTER_TARGET_KIND("cuda", kDLCUDA)
     .set_default_keys({"cuda", "gpu"})
     .set_target_parser(UpdateCUDAAttrs);
 
-TVM_REGISTER_TARGET_KIND("cuda_llis", kDLGPU)
+TVM_REGISTER_TARGET_KIND("cuda_llis", kDLCUDA)
     .add_attr_option<String>("mcpu")
     .add_attr_option<String>("arch")
     .add_attr_option<Integer>("max_shared_memory_per_block")

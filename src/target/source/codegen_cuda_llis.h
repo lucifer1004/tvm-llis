@@ -21,8 +21,8 @@
  * \file codegen_cuda.h
  * \brief Utility to generate cuda code
  */
-#ifndef TVM_TARGET_SOURCE_CODEGEN_CUDA_KELVIN_H_
-#define TVM_TARGET_SOURCE_CODEGEN_CUDA_KELVIN_H_
+#ifndef TVM_TARGET_SOURCE_CODEGEN_CUDA_LLIS_H_
+#define TVM_TARGET_SOURCE_CODEGEN_CUDA_LLIS_H_
 
 #include <tvm/target/codegen.h>
 #include <tvm/tir/expr.h>
@@ -50,4 +50,4 @@ class CodeGenCUDALlis : public CodeGenCUDA {
 }  // namespace codegen
 }  // namespace tvm
 
-#endif  // TVM_TARGET_SOURCE_CODEGEN_CUDA_KELVIN_H_
+#endif  // TVM_TARGET_SOURCE_CODEGEN_CUDA_LLIS_H_

@@ -190,9 +190,9 @@ inline PackedFunc PackFuncVoidAddrExtraArgs_(F f, const std::vector<ArgConvertCo
   int num_args = static_cast<int>(codes.size());
   auto ret = [f, codes, num_args, num_extra_args](TVMArgs args, TVMRetValue* ret) {
     TempArray<void*, N> addr_(num_args + num_extra_args);
-    TempArray<ArgUnion, N> holder_(num_args);
+    TempArray<ArgUnion32, N> holder_(num_args);
     void** addr = addr_.data();
-    ArgUnion* holder = holder_.data();
+    ArgUnion32* holder = holder_.data();
     for (int i = 0; i < num_args; ++i) {
       switch (codes[i]) {
         case INT64_TO_INT64:

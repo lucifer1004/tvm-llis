@@ -39,10 +39,12 @@ void CodeGenCUDALlis::AddFunction(const PrimFunc& f) {
   ReserveKeywordsAsUnique();
 
   auto global_symbol = f->GetAttr<String>(tvm::attr::kGlobalSymbol);
-  CHECK(global_symbol.defined()) << "CodeGenCUDALlis: Expect PrimFunc to have the global_symbol attribute";
+  ICHECK(global_symbol.defined())
+      << "CodeGenCUDALlis: Expect PrimFunc to have the global_symbol attribute";
   bool no_alias = f->HasNonzeroAttr(tir::attr::kNoAlias);
 
   this->PrintFuncPrefix();
+  this->PrintExtraAttrs(f);
   this->stream << " " << static_cast<std::string>(global_symbol.value()) << "(";
 
   for (size_t i = 0; i < f->params.size(); ++i) {
@@ -65,19 +67,16 @@ void CodeGenCUDALlis::AddFunction(const PrimFunc& f) {
         }
       }
 
-      if (no_alias && restrict_keyword_.length() != 0) {
-        stream << ' ' << restrict_keyword_;
+      if (no_alias) {
+        PrintRestrict(v, stream);
       }
     } else {
       PrintType(GetType(v), stream);
     }
     stream << ' ' << vid;
   }
-
   this->PrintExtraParams();
-
   stream << ") {\n";
-
   this->PreFunctionBody(f);
   int func_scope = this->BeginScope();
   this->PrintFuncStart();

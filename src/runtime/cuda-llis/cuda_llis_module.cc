@@ -25,6 +25,7 @@
 
 #include <llis/job/context.h>
 #include <llis/job/coroutine_job.h>
+#include <llis/job/finished_block_notifier.h>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -36,12 +37,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../file_util.h"
+#include "../file_utils.h"
 #include "../meta_data.h"
 #include "../pack_args.h"
 #include "../thread_storage_scope.h"
 #include "../cuda/cuda_common.h"
-#include "llis/job/finished_block_notifier.h"
 
 namespace tvm {
 namespace runtime {
@@ -76,11 +76,11 @@ class CUDALlisModuleNode : public runtime::ModuleNode {
     std::string fmt = GetFileFormat(file_name, format);
     std::string meta_file = GetMetaFilePath(file_name);
     if (fmt == "cu_llis") {
-      CHECK_NE(cuda_source_.length(), 0);
+      ICHECK_NE(cuda_source_.length(), 0);
       SaveMetaDataToFile(meta_file, fmap_);
       SaveBinaryToFile(file_name, cuda_source_);
     } else {
-      CHECK_EQ(fmt, fmt_) << "Can only save to format=" << fmt_;
+      ICHECK_EQ(fmt, fmt_) << "Can only save to format=" << fmt_;
       SaveMetaDataToFile(meta_file, fmap_);
       SaveBinaryToFile(file_name, data_);
     }
@@ -129,7 +129,7 @@ class CUDALlisModuleNode : public runtime::ModuleNode {
     size_t nbytes;
 
     CUresult result = cuModuleGetGlobal(&global, &nbytes, module_[device_id], global_name.c_str());
-    CHECK_EQ(nbytes, expect_nbytes);
+    ICHECK_EQ(nbytes, expect_nbytes);
     if (result != CUDA_SUCCESS) {
       const char* msg;
       cuGetErrorName(result, &msg);
@@ -158,24 +158,34 @@ class CUDALlisWrappedFunc {
  public:
   // initialize the CUDA function.
   void Init(CUDALlisModuleNode* m, ObjectPtr<Object> sptr, const std::string& func_name,
-            size_t num_void_args, const std::vector<std::string>& thread_axis_tags) {
+            size_t num_void_args, const std::vector<std::string>& launch_param_tags) {
     m_ = m;
     sptr_ = sptr;
     func_name_ = func_name;
     std::fill(fcache_.begin(), fcache_.end(), nullptr);
-    thread_axis_cfg_.Init(num_void_args, thread_axis_tags);
+    launch_param_config_.Init(num_void_args, launch_param_tags);
     num_void_args_ = num_void_args;
   }
   // invoke the function with void arguments
   void operator()(TVMArgs args, TVMRetValue* rv, void** void_args) const {
     llis::job::CoroutineJob* job = dynamic_cast<llis::job::CoroutineJob*>(llis::job::Context::get_current_job());
 
-    ThreadWorkLoad wl = thread_axis_cfg_.Extract(args);
-
     int device_id;
     CUDA_CALL(cudaGetDevice(&device_id));
+    ThreadWorkLoad wl = launch_param_config_.Extract(args);
+
     if (fcache_[device_id] == nullptr) {
       fcache_[device_id] = m_->GetFunc(device_id, func_name_);
+      if (wl.dyn_shmem_size >= (48 << 10)) {
+        // Assumption: dyn_shmem_size doesn't change across different invocations of
+        // fcache_[device_id]
+        CUresult result = cuFuncSetAttribute(
+            fcache_[device_id], CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, wl.dyn_shmem_size);
+        if (result != CUDA_SUCCESS) {
+          LOG(FATAL) << "Failed to set the allowed dynamic shared memory size to "
+                     << wl.dyn_shmem_size;
+        }
+      }
       cuFuncGetAttribute(&smem_size_cache_[device_id], CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, fcache_[device_id]);
       cuFuncGetAttribute(&nreg_cache_[device_id], CU_FUNC_ATTRIBUTE_NUM_REGS, fcache_[device_id]);
     }
@@ -194,7 +204,7 @@ class CUDALlisWrappedFunc {
     CUstream strm = static_cast<CUstream>(job->get_cuda_stream());
     CUresult result = cuLaunchKernel(fcache_[device_id], wl.grid_dim(0), wl.grid_dim(1),
                                      wl.grid_dim(2), wl.block_dim(0), wl.block_dim(1),
-                                     wl.block_dim(2), 0, strm, void_args, nullptr);
+                                     wl.block_dim(2), wl.dyn_shmem_size, strm, void_args, nullptr);
     if (result != CUDA_SUCCESS && result != CUDA_ERROR_DEINITIALIZED) {
       const char* msg;
       cuGetErrorName(result, &msg);
@@ -226,8 +236,8 @@ class CUDALlisWrappedFunc {
   mutable std::array<CUfunction, kMaxNumGPUs> fcache_;
   mutable std::array<int, kMaxNumGPUs> smem_size_cache_;
   mutable std::array<int, kMaxNumGPUs> nreg_cache_;
-  // thread axis configuration
-  ThreadAxisConfig thread_axis_cfg_;
+  // launch parameters configuration
+  LaunchParamConfig launch_param_config_;
   // num of args
   int num_void_args_;
 };
@@ -258,9 +268,9 @@ class CUDALlisPrepGlobalBarrier {
 };
 
 PackedFunc CUDALlisModuleNode::GetFunction(const std::string& name,
-                                             const ObjectPtr<Object>& sptr_to_self) {
-  CHECK_EQ(sptr_to_self.get(), this);
-  CHECK_NE(name, symbol::tvm_module_main) << "Device function do not have main";
+                                           const ObjectPtr<Object>& sptr_to_self) {
+  ICHECK_EQ(sptr_to_self.get(), this);
+  ICHECK_NE(name, symbol::tvm_module_main) << "Device function do not have main";
   if (name == symbol::tvm_prepare_global_barrier) {
     return PackedFunc(CUDALlisPrepGlobalBarrier(this, sptr_to_self));
   }
@@ -268,13 +278,13 @@ PackedFunc CUDALlisModuleNode::GetFunction(const std::string& name,
   if (it == fmap_.end()) return PackedFunc();
   const FunctionInfo& info = it->second;
   CUDALlisWrappedFunc f;
-  f.Init(this, sptr_to_self, name, info.arg_types.size(), info.thread_axis_tags);
+  f.Init(this, sptr_to_self, name, info.arg_types.size(), info.launch_param_tags);
   return PackFuncVoidAddrExtraArgs(f, info.arg_types, 2);
 }
 
 Module CUDALlisModuleCreate(std::string data, std::string fmt,
-                              std::unordered_map<std::string, FunctionInfo> fmap,
-                              std::string cuda_source) {
+                            std::unordered_map<std::string, FunctionInfo> fmap,
+                            std::string cuda_source) {
   auto n = make_object<CUDALlisModuleNode>(data, fmt, fmap, cuda_source);
   return Module(n);
 }

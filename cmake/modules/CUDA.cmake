@@ -40,7 +40,7 @@ if(USE_CUDA)
 
   if(USE_LLIS)
     message(STATUS "Build with LLIS support")
-    file(GLOB RUNTIME_LLIS_SRCS src/runtime/cuda-llis/*.cc)
+    tvm_file_glob(GLOB RUNTIME_LLIS_SRCS src/runtime/cuda-llis/*.cc)
     list(APPEND RUNTIME_SRCS ${RUNTIME_LLIS_SRCS})
     include_directories(${USE_LLIS}/include)
     link_directories(${USE_LLIS}/lib)

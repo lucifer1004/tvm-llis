@@ -21,8 +21,8 @@
  * \file cuda_llis_module.h
  * \brief Execution handling of CUDA kernels
  */
-#ifndef TVM_RUNTIME_CUDA_CUDA_KELVIN_MODULE_H_
-#define TVM_RUNTIME_CUDA_CUDA_KELVIN_MODULE_H_
+#ifndef TVM_RUNTIME_CUDA_CUDA_LLIS_MODULE_H_
+#define TVM_RUNTIME_CUDA_CUDA_LLIS_MODULE_H_
 
 #include <tvm/runtime/module.h>
 
@@ -49,4 +49,4 @@ Module CUDALlisModuleCreate(std::string data, std::string fmt,
                             std::string cuda_source);
 }  // namespace runtime
 }  // namespace tvm
-#endif  // TVM_RUNTIME_CUDA_CUDA_KELVIN_MODULE_H_
+#endif  // TVM_RUNTIME_CUDA_CUDA_LLIS_MODULE_H_
