@@ -33,10 +33,8 @@
 
 #include "../../runtime/cuda/cuda_common.h"
 #include "../../runtime/cuda/cuda_module.h"
-#include "../../runtime/cuda-llis/cuda_llis_module.h"
 #include "../build_common.h"
 #include "../source/codegen_cuda.h"
-#include "../source/codegen_cuda_llis.h"
 
 namespace tvm {
 namespace codegen {
@@ -80,23 +78,6 @@ std::string FindCUDAIncludePath() {
   return cuda_include_path;
 }
 
-std::string FindLLISIncludePath() {
-#if defined(_WIN32)
-  const std::string delimiter = "\\";
-#else
-  const std::string delimiter = "/";
-#endif
-  std::string llis_include_path;
-  const char* llis_path_env = std::getenv("LLIS_PATH");
-  if (llis_path_env != nullptr) {
-    llis_include_path += llis_path_env;
-    llis_include_path += delimiter + "include";
-    return llis_include_path;
-  } else {
-    return "";
-  }
-}
-
 std::string NVRTCCompile(const std::string& code, bool include_path = false) {
   std::vector<std::string> compile_params;
   std::vector<const char*> param_cstrings{};
@@ -117,13 +98,6 @@ std::string NVRTCCompile(const std::string& code, bool include_path = false) {
 
   if (include_path) {
     std::string include_option = "--include-path=" + FindCUDAIncludePath();
-
-    compile_params.push_back(include_option);
-  }
-
-  std::string llis_include_path = FindLLISIncludePath();
-  if (llis_include_path != "") {
-    std::string include_option = "--include-path=" + llis_include_path;
 
     compile_params.push_back(include_option);
   }
@@ -188,50 +162,6 @@ runtime::Module BuildCUDA(IRModule mod, Target target) {
   return CUDAModuleCreate(ptx, fmt, ExtractFuncInfo(mod), code);
 }
 
-runtime::Module BuildCUDALlis(IRModule mod, Target target) {
-  using tvm::runtime::Registry;
-  bool output_ssa = false;
-  CodeGenCUDALlis cg;
-  cg.Init(output_ssa);
-
-  for (auto kv : mod->functions) {
-    ICHECK(kv.second->IsInstance<PrimFuncNode>()) << "CodeGenCUDALlis: Can only take PrimFunc";
-    auto f = Downcast<PrimFunc>(kv.second);
-    auto calling_conv = f->GetAttr<Integer>(tvm::attr::kCallingConv);
-    ICHECK(calling_conv == CallingConv::kDeviceKernelLaunch)
-        << "CodeGenCUDALlis: expect calling_conv equals CallingConv::kDeviceKernelLaunch";
-    cg.AddFunction(f);
-  }
-
-  std::string code = cg.Finish();
-
-  if (const auto* f = Registry::Get("tvm_callback_cuda_postproc")) {
-    code = (*f)(code).operator std::string();
-  }
-  std::string fmt = "ptx_llis";
-  std::string ptx;
-  const auto* f_enter = Registry::Get("target.TargetEnterScope");
-  (*f_enter)(target);
-  if (const auto* f = Registry::Get("tvm_callback_cuda_compile")) {
-    std::string llis_include_path = FindLLISIncludePath();
-    if (llis_include_path != "") {
-      std::string include_option = "--include-path=" + llis_include_path;
-      ptx = (*f)(code, include_option).operator std::string();
-    } else {
-      ptx = (*f)(code).operator std::string();
-    }
-    // Dirty matching to check PTX vs cubin.
-    // TODO(tqchen) more reliable checks
-    if (ptx[0] != '/') fmt = "cubin";
-  } else {
-    ptx = NVRTCCompile(code, cg.need_include_path());
-  }
-  const auto* f_exit = Registry::Get("target.TargetExitScope");
-  (*f_exit)(target);
-  return CUDALlisModuleCreate(ptx, fmt, ExtractFuncInfo(mod), code);
-}
-
 TVM_REGISTER_GLOBAL("target.build.cuda").set_body_typed(BuildCUDA);
-TVM_REGISTER_GLOBAL("target.build.cuda_llis").set_body_typed(BuildCUDALlis);
 }  // namespace codegen
 }  // namespace tvm

@@ -70,7 +70,7 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
    * \param f The function to be compiled.
    * \param whether to append return 0 in the end.
    */
-  virtual void AddFunction(const PrimFunc& f);
+  void AddFunction(const PrimFunc& f);
   /*!
    * \brief Finalize the compilation and return the code.
    * \return The code.

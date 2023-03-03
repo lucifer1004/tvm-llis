@@ -220,7 +220,6 @@ class Device(ctypes.Structure):
         "hybrid": 1,
         "composite": 1,
         "cuda": 2,
-        "cuda_llis": 2,
         "nvptx": 2,
         "cl": 4,
         "opencl": 4,

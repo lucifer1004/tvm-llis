@@ -671,7 +671,7 @@ class ThreadAllreduceBuilder final : public StmtExprMutator {
   bool is_warp_reduction(const std::vector<DataType>& types, int group_extent, int reduce_extent,
                          int contiguous_reduce_extent) const {
     // Only cuda target supports warp reductions.
-    if ((target_->kind->name != "cuda") && (target_->kind->name != "cuda_llis") && (target_->kind->name != "rocm")) return false;
+    if ((target_->kind->name != "cuda") && (target_->kind->name != "rocm")) return false;
 
     // rocm only supports 32 bit operands for shuffling at the moment
     if ((target_->kind->name == "rocm") &&

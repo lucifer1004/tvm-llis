@@ -390,26 +390,6 @@ def cuda(model="unknown", arch=None, options=None):
     return Target(" ".join(["cuda"] + opts))
 
 
-def cuda_llis(model="unknown", arch=None, options=None):
-    """Returns a cuda_llis target.
-
-    Parameters
-    ----------
-    model: str
-        The model of cuda device (e.g. 1080ti)
-    arch: str
-        The cuda architecture (e.g. sm_61)
-    options : str or list of str
-        Additional options
-    """
-    opts = _merge_opts(["-model=%s" % model], options)
-    if arch:
-        opts = _merge_opts(["-arch=%s" % arch], opts)
-    if not any(["-arch" in opt for opt in opts]):
-        warnings.warn("Try specifying cuda arch by adding 'arch=sm_xx' to your target.")
-    return Target(" ".join(["cuda_llis"] + opts))
-
-
 def rocm(model="unknown", options=None):
     """Returns a ROCM target.
 
