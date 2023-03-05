@@ -22,6 +22,12 @@
  */
 #include "cuda_module.h"
 
+#ifdef USE_LLIS
+#include <llis/job/context.h>
+#include <llis/job/coroutine_job.h>
+#include <llis/job/finished_block_notifier.h>
+#endif
+
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <tvm/runtime/registry.h>
@@ -49,8 +55,9 @@ class CUDAModuleNode : public runtime::ModuleNode {
  public:
   explicit CUDAModuleNode(std::string data, std::string fmt,
                           std::unordered_map<std::string, FunctionInfo> fmap,
-                          std::string cuda_source)
-      : data_(data), fmt_(fmt), fmap_(fmap), cuda_source_(cuda_source) {
+                          std::string cuda_source,
+                          unsigned llis_flag = 0)
+      : data_(data), fmt_(fmt), fmap_(fmap), cuda_source_(cuda_source), llis_flag_(llis_flag) {
     std::fill(module_.begin(), module_.end(), nullptr);
   }
   // destructor
@@ -63,7 +70,13 @@ class CUDAModuleNode : public runtime::ModuleNode {
     }
   }
 
-  const char* type_key() const final { return "cuda"; }
+  const char* type_key() const final {
+    if (llis_flag_) {
+      return "cuda_llis";
+    } else {
+      return "cuda";
+    }
+  }
 
   PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) final;
 
@@ -142,6 +155,8 @@ class CUDAModuleNode : public runtime::ModuleNode {
   std::unordered_map<std::string, FunctionInfo> fmap_;
   // The cuda source.
   std::string cuda_source_;
+  // Flag for LLIS. 0 if disabled.
+  unsigned llis_flag_;
   // the internal modules per GPU, to be lazily initialized.
   std::array<CUmodule, kMaxNumGPUs> module_;
   // internal mutex when updating the module
@@ -153,12 +168,17 @@ class CUDAWrappedFunc {
  public:
   // initialize the CUDA function.
   void Init(CUDAModuleNode* m, ObjectPtr<Object> sptr, const std::string& func_name,
-            size_t num_void_args, const std::vector<std::string>& launch_param_tags) {
+            size_t num_void_args, const std::vector<std::string>& launch_param_tags,
+            unsigned llis_flag) {
     m_ = m;
     sptr_ = sptr;
     func_name_ = func_name;
     std::fill(fcache_.begin(), fcache_.end(), nullptr);
     launch_param_config_.Init(num_void_args, launch_param_tags);
+#ifdef USE_LLIS
+    num_void_args_ = num_void_args;
+    llis_flag_ = llis_flag;
+#endif
   }
   // invoke the function with void arguments
   void operator()(TVMArgs args, TVMRetValue* rv, void** void_args) const {
@@ -178,8 +198,39 @@ class CUDAWrappedFunc {
                      << wl.dyn_shmem_size;
         }
       }
+#ifdef USE_LLIS
+      if (llis_flag_) {
+        cuFuncGetAttribute(&smem_size_cache_[device_id], CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, fcache_[device_id]);
+        cuFuncGetAttribute(&nreg_cache_[device_id], CU_FUNC_ATTRIBUTE_NUM_REGS, fcache_[device_id]);
+      }
+#endif
     }
+#ifdef USE_LLIS
+    CUstream strm;
+    llis::JobId job_id;
+    llis::job::FinishedBlockNotifier* notifier;
+
+    if (llis_flag_) {
+      llis::job::CoroutineJob* job = dynamic_cast<llis::job::CoroutineJob*>(llis::job::Context::get_current_job());
+      job->set_num_threads_per_block(wl.block_dim(0) * wl.block_dim(1) * wl.block_dim(2));
+      job->set_num_blocks(wl.grid_dim(0) * wl.grid_dim(1) * wl.grid_dim(2));
+      job->set_smem_size_per_block(smem_size_cache_[device_id]);
+      job->set_num_registers_per_thread(nreg_cache_[device_id]);
+
+      job->yield();
+
+      job_id = job->get_id();
+      notifier = job->get_finished_block_notifier();
+      void_args[num_void_args_] = (void*)&job_id;
+      void_args[num_void_args_ + 1] = (void*)&notifier;
+
+      strm = static_cast<CUstream>(job->get_cuda_stream());
+    } else {
+      strm = static_cast<CUstream>(CUDAThreadEntry::ThreadLocal()->stream);
+    }
+#else
     CUstream strm = static_cast<CUstream>(CUDAThreadEntry::ThreadLocal()->stream);
+#endif
     CUresult result = cuLaunchKernel(fcache_[device_id], wl.grid_dim(0), wl.grid_dim(1),
                                      wl.grid_dim(2), wl.block_dim(0), wl.block_dim(1),
                                      wl.block_dim(2), wl.dyn_shmem_size, strm, void_args, nullptr);
@@ -212,8 +263,18 @@ class CUDAWrappedFunc {
   // Device function cache per device.
   // mark as mutable, to enable lazy initialization
   mutable std::array<CUfunction, kMaxNumGPUs> fcache_;
+#ifdef USE_LLIS
+  mutable std::array<int, kMaxNumGPUs> smem_size_cache_;
+  mutable std::array<int, kMaxNumGPUs> nreg_cache_;
+#endif
   // launch parameters configuration
   LaunchParamConfig launch_param_config_;
+#ifdef USE_LLIS
+  // num of args
+  int num_void_args_;
+  // Flag for LLIS. 0 if disabled
+  unsigned llis_flag_;
+#endif
 };
 
 class CUDAPrepGlobalBarrier {
@@ -252,14 +313,23 @@ PackedFunc CUDAModuleNode::GetFunction(const std::string& name,
   if (it == fmap_.end()) return PackedFunc();
   const FunctionInfo& info = it->second;
   CUDAWrappedFunc f;
-  f.Init(this, sptr_to_self, name, info.arg_types.size(), info.launch_param_tags);
+  f.Init(this, sptr_to_self, name, info.arg_types.size(), info.launch_param_tags, llis_flag_);
+#ifdef USE_LLIS
+  if (llis_flag_) {
+    return PackFuncVoidAddrExtraArgs(f, info.arg_types, 2);
+  } else {
+    return PackFuncVoidAddr(f, info.arg_types);
+  }
+#else
   return PackFuncVoidAddr(f, info.arg_types);
+#endif
 }
 
 Module CUDAModuleCreate(std::string data, std::string fmt,
                         std::unordered_map<std::string, FunctionInfo> fmap,
-                        std::string cuda_source) {
-  auto n = make_object<CUDAModuleNode>(data, fmt, fmap, cuda_source);
+                        std::string cuda_source,
+                        unsigned llis_flag) {
+  auto n = make_object<CUDAModuleNode>(data, fmt, fmap, cuda_source, llis_flag);
   return Module(n);
 }
 
@@ -274,7 +344,7 @@ Module CUDAModuleLoadFile(const std::string& file_name, const std::string& forma
   return CUDAModuleCreate(data, fmt, fmap, std::string());
 }
 
-Module CUDAModuleLoadBinary(void* strm) {
+Module CUDAModuleLoadBinary_(void* strm, unsigned llis_flag = 0) {
   dmlc::Stream* stream = static_cast<dmlc::Stream*>(strm);
   std::string data;
   std::unordered_map<std::string, FunctionInfo> fmap;
@@ -282,7 +352,15 @@ Module CUDAModuleLoadBinary(void* strm) {
   stream->Read(&fmt);
   stream->Read(&fmap);
   stream->Read(&data);
-  return CUDAModuleCreate(data, fmt, fmap, std::string());
+  return CUDAModuleCreate(data, fmt, fmap, std::string(), llis_flag);
+}
+
+Module CUDAModuleLoadBinary(void* strm) {
+  return CUDAModuleLoadBinary_(strm, 0);
+}
+
+Module CUDALlisModuleLoadBinary(void* strm) {
+  return CUDAModuleLoadBinary_(strm, 1);
 }
 
 TVM_REGISTER_GLOBAL("runtime.module.loadfile_cubin").set_body_typed(CUDAModuleLoadFile);
@@ -290,5 +368,7 @@ TVM_REGISTER_GLOBAL("runtime.module.loadfile_cubin").set_body_typed(CUDAModuleLo
 TVM_REGISTER_GLOBAL("runtime.module.loadfile_ptx").set_body_typed(CUDAModuleLoadFile);
 
 TVM_REGISTER_GLOBAL("runtime.module.loadbinary_cuda").set_body_typed(CUDAModuleLoadBinary);
+
+TVM_REGISTER_GLOBAL("runtime.module.loadbinary_cuda_llis").set_body_typed(CUDALlisModuleLoadBinary);
 }  // namespace runtime
 }  // namespace tvm

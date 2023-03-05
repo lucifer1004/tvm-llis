@@ -78,7 +78,24 @@ std::string FindCUDAIncludePath() {
   return cuda_include_path;
 }
 
-std::string NVRTCCompile(const std::string& code, bool include_path = false) {
+std::string FindLLISIncludePath() {
+#if defined(_WIN32)
+  const std::string delimiter = "\\";
+#else
+  const std::string delimiter = "/";
+#endif
+  std::string llis_include_path;
+  const char* llis_path_env = std::getenv("LLIS_PATH");
+  if (llis_path_env != nullptr) {
+    llis_include_path += llis_path_env;
+    llis_include_path += delimiter + "include";
+    return llis_include_path;
+  } else {
+    return "";
+  }
+}
+
+std::string NVRTCCompile(const std::string& code, bool include_path = false, unsigned llis_flag = 0) {
   std::vector<std::string> compile_params;
   std::vector<const char*> param_cstrings{};
   nvrtcProgram prog;
@@ -100,6 +117,15 @@ std::string NVRTCCompile(const std::string& code, bool include_path = false) {
     std::string include_option = "--include-path=" + FindCUDAIncludePath();
 
     compile_params.push_back(include_option);
+  }
+
+  if (llis_flag) {
+    std::string llis_include_path = FindLLISIncludePath();
+    if (llis_include_path != "") {
+      std::string include_option = "--include-path=" + llis_include_path;
+
+      compile_params.push_back(include_option);
+    }
   }
 
   for (const auto& string : compile_params) {
@@ -126,10 +152,12 @@ std::string NVRTCCompile(const std::string& code, bool include_path = false) {
 }
 
 runtime::Module BuildCUDA(IRModule mod, Target target) {
+  unsigned llis_flag = target->GetAttr("llis_flag", Integer(0)).value().get()->value;
+
   using tvm::runtime::Registry;
   bool output_ssa = false;
   CodeGenCUDA cg;
-  cg.Init(output_ssa);
+  cg.Init(output_ssa, llis_flag);
 
   for (auto kv : mod->functions) {
     ICHECK(kv.second->IsInstance<PrimFuncNode>()) << "CodeGenCUDA: Can only take PrimFunc";
@@ -150,16 +178,26 @@ runtime::Module BuildCUDA(IRModule mod, Target target) {
   const auto* f_enter = Registry::Get("target.TargetEnterScope");
   (*f_enter)(target);
   if (const auto* f = Registry::Get("tvm_callback_cuda_compile")) {
-    ptx = (*f)(code).operator std::string();
+    if (llis_flag) {
+      std::string llis_include_path = FindLLISIncludePath();
+       if (llis_include_path != "") {
+        std::string include_option = "--include-path=" + llis_include_path;
+        ptx = (*f)(code, include_option).operator std::string();
+      } else {
+        ptx = (*f)(code).operator std::string();
+      }
+    } else {
+      ptx = (*f)(code).operator std::string();
+    }
     // Dirty matching to check PTX vs cubin.
     // TODO(tqchen) more reliable checks
     if (ptx[0] != '/') fmt = "cubin";
   } else {
-    ptx = NVRTCCompile(code, cg.need_include_path());
+    ptx = NVRTCCompile(code, cg.need_include_path(), llis_flag);
   }
   const auto* f_exit = Registry::Get("target.TargetExitScope");
   (*f_exit)(target);
-  return CUDAModuleCreate(ptx, fmt, ExtractFuncInfo(mod), code);
+  return CUDAModuleCreate(ptx, fmt, ExtractFuncInfo(mod), code, llis_flag);
 }
 
 TVM_REGISTER_GLOBAL("target.build.cuda").set_body_typed(BuildCUDA);

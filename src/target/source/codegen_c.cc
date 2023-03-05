@@ -117,9 +117,11 @@ void CodeGenC::AddFunction(const PrimFunc& f) {
     }
     stream << ' ' << vid;
   }
+  this->PrintExtraParams();
   stream << ") {\n";
   this->PreFunctionBody(f);
   int func_scope = this->BeginScope();
+  this->PrintFuncStart();
   this->PrintStmt(f->body);
   this->PrintFinalReturn();
   this->EndScope(func_scope);
@@ -130,6 +132,10 @@ void CodeGenC::AddFunction(const PrimFunc& f) {
 void CodeGenC::PrintFuncPrefix() { stream << "void"; }
 
 void CodeGenC::PrintExtraAttrs(const PrimFunc& f) {}
+
+void CodeGenC::PrintExtraParams() {}
+
+void CodeGenC::PrintFuncStart() {}
 
 void CodeGenC::PrintFinalReturn() {}
 

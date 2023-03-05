@@ -49,7 +49,8 @@ static constexpr const int kMaxNumGPUs = 32;
  */
 Module CUDAModuleCreate(std::string data, std::string fmt,
                         std::unordered_map<std::string, FunctionInfo> fmap,
-                        std::string cuda_source);
+                        std::string cuda_source,
+                        unsigned llis_flag = 0);
 }  // namespace runtime
 }  // namespace tvm
 #endif  // TVM_RUNTIME_CUDA_CUDA_MODULE_H_

@@ -39,7 +39,7 @@ namespace codegen {
 class CodeGenCUDA final : public CodeGenC {
  public:
   CodeGenCUDA();
-  void Init(bool output_ssa);
+  void Init(bool output_ssa, unsigned llis_flag = false);
   std::string Finish();
   bool need_include_path() {
     return (enable_fp16_ || enable_bf16_ || enable_int8_ || need_math_constants_h_ || need_mma_h_);
@@ -47,6 +47,9 @@ class CodeGenCUDA final : public CodeGenC {
   // override behavior
   void PrintFuncPrefix() final;
   void PrintExtraAttrs(const PrimFunc& f) final;
+  void PrintExtraParams() final;
+  void PrintFinalReturn() final;
+  void PrintFuncStart() final;
   void VisitStmt_(const ForNode* op) final;
   void PrintStorageSync(const CallNode* op) final;
   void PrintStorageScope(const std::string& scope, std::ostream& os) final;  // NOLINT(*)
@@ -81,6 +84,9 @@ class CodeGenCUDA final : public CodeGenC {
 
   // Whether scope such as "__shared__" or "__constant__"  is part of type.
   bool IsScopePartOfType() const final { return false; }
+
+  // Flag for LLIS. 0 if disabled
+  unsigned llis_flag_;
 
   // Whether global barrier is needed.
   bool need_global_barrier_{false};

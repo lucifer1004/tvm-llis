@@ -109,6 +109,10 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
    *  Example: __launch_bounds__(256) for CUDA functions
    */
   virtual void PrintExtraAttrs(const PrimFunc& f);
+
+  virtual void PrintExtraParams();
+  virtual void PrintFuncStart();
+
   /*!
    * \brief Print the final return at the end the function.
    */

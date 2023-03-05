@@ -41,14 +41,36 @@ namespace codegen {
 
 CodeGenCUDA::CodeGenCUDA() { restrict_keyword_ = "__restrict__"; }
 
-void CodeGenCUDA::Init(bool output_ssa) {
+void CodeGenCUDA::Init(bool output_ssa, unsigned llis_flag) {
   CodeGenC::Init(output_ssa);
   vid_global_barrier_state_ = name_supply_->FreshName(runtime::symbol::tvm_global_barrier_state);
   vid_global_barrier_expect_ = name_supply_->FreshName("__barrier_expect");
   ICHECK_EQ(vid_global_barrier_state_, runtime::symbol::tvm_global_barrier_state);
+  llis_flag_ = llis_flag;
 }
 
 void CodeGenCUDA::PrintFuncPrefix() { stream << "extern \"C\" __global__ void"; }
+
+void CodeGenCUDA::PrintExtraParams() {
+  CodeGenC::PrintExtraParams();
+  if (llis_flag_) {
+    stream << ", llis::JobId __cuda_llis_job_id, llis::job::FinishedBlockNotifier* __cuda_llis_notifier";
+  }
+}
+
+void CodeGenCUDA::PrintFinalReturn() {
+  CodeGenC::PrintFinalReturn();
+  if (llis_flag_) {
+    stream << "__cuda_llis_exit: __cuda_llis_notifier->end(__cuda_llis_job_id);\n";
+  }
+}
+
+void CodeGenCUDA::PrintFuncStart() {
+  if (llis_flag_) {
+    stream << "__cuda_llis_notifier->start(__cuda_llis_job_id);\n";
+  }
+  CodeGenC::PrintFuncStart();
+}
 
 class ThreadIdxExtractor : public tir::StmtVisitor {
  private:
@@ -90,6 +112,16 @@ void CodeGenCUDA::PrintExtraAttrs(const PrimFunc& f) {
 }
 
 std::string CodeGenCUDA::Finish() {
+  if (llis_flag_ & 2) {
+    decl_stream << "#define LLIS_FINISHED_BLOCK_NOTIFICATION_AGG\n";
+  }
+  if (llis_flag_ & 4) {
+    decl_stream << "#define LLIS_MEASURE_BLOCK_TIME\n";
+  }
+  if (llis_flag_) {
+    decl_stream << "#include <llis/job/finished_block_notifier.h>\n";
+  }
+
   if (enable_fp16_) {
     decl_stream << "#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)\n";
     decl_stream << "#include <cuda_fp16.h>\n";
