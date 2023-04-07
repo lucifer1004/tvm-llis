@@ -33,3 +33,17 @@ REGISTER_OP("TvmDsoOp")
         "uint32, uint64} = DT_FLOAT")
     .Attr("static_output_shape: list(int) >= 0 = []")
     .Attr("has_static_output_shape: bool");
+
+REGISTER_OP("TvmDsoGraph")
+    .Input("input_args: ListT")
+    .Attr(
+        "ListT: list({float16, float32, float64, int8, int16, int32, int64, uint8, uint16,"
+        "uint32, uint64})")
+    .Input("dynamic_output_shape: int64")
+    .Output("output: output_dtype")
+    .Attr("lib_path: string")
+    .Attr(
+        "output_dtype: {float16, float32, float64, int8, int16, int32, int64, uint8, uint16,"
+        "uint32, uint64} = DT_FLOAT")
+    .Attr("static_output_shape: list(int) >= 0 = []")
+    .Attr("has_static_output_shape: bool");

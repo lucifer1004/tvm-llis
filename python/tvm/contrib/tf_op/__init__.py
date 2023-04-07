@@ -18,3 +18,4 @@
 from . import module
 
 OpModule = module.OpModule
+OpGraphModule = module.OpGraphModule

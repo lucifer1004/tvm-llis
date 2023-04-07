@@ -36,7 +36,7 @@ using tensorflow::OpKernel;
 using tensorflow::OpKernelConstruction;
 using tensorflow::OpKernelContext;
 
-using tvm::runtime::TVMArgs;
+using tvm::runtime::NDArray;
 using tvm::runtime::TVMArgsSetter;
 using tvm::runtime::TVMRetValue;
 
@@ -313,15 +313,133 @@ class TVMDSOOp : public OpKernel {
       setter(k, &args[k]);
     }
     TVMRetValue rv;
-    tvm_func.CallPacked(TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
+    tvm_func.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
 
     output.CopyToOrigin();
   }
 };
 
+
+template <typename DEVICE_TYPE>
+class TVMDSOGraph : public OpKernel {
+ private:
+  tvm::runtime::PackedFunc mod;
+  std::string lib_path;
+
+  tensorflow::DataType output_dtype;
+
+  bool has_static_output_shape;
+  std::vector<tensorflow::int64> static_output_shape;
+
+  void initAttributes(OpKernelConstruction* context) {
+    context->GetAttr("lib_path", &lib_path);
+    context->GetAttr("output_dtype", &output_dtype);
+
+    context->GetAttr("has_static_output_shape", &has_static_output_shape);
+    context->GetAttr("static_output_shape", &static_output_shape);
+  }
+
+ public:
+  explicit TVMDSOGraph(OpKernelConstruction* context) : OpKernel(context) {
+    // Get attr
+    initAttributes(context);
+
+    // Load TVM function from dynamic library
+    tvm::runtime::Module mod_factory = tvm::runtime::Module::LoadFromFile(lib_path);
+    mod = mod_factory.GetFunction("default");
+  }
+
+  void Compute(tensorflow::OpKernelContext* context) override {
+    // the last input is output shape spec
+    const int num_inputs = context->num_inputs() - 1;
+    const int num_total_args = num_inputs + 1;
+    std::vector<DLManagedTensor> args(num_total_args);
+    std::vector<TensorAsBuf> buf_info(num_inputs);
+    std::vector<ShapeContainer> shapes(num_inputs);
+
+    tensorflow::Status status;
+    int device_id = TVMDSOOpTrait<DEVICE_TYPE>::device_id(context);
+    int device_type = TVMDSOOpTrait<DEVICE_TYPE>::device_type;
+
+    DLContext dl_ctx = {DLDeviceType(device_type), device_id};
+
+    // Load TVM function from dynamic library
+    tvm::runtime::Module gmod = mod(dl_ctx);
+    tvm::runtime::PackedFunc set_input = gmod.GetFunction("set_input");
+    tvm::runtime::PackedFunc get_output = gmod.GetFunction("get_output");
+    tvm::runtime::PackedFunc run = gmod.GetFunction("run");
+
+    // Get output shape
+    tensorflow::TensorShape output_shape;
+    auto& output_shape_tensor = context->input(num_inputs);
+    if (has_static_output_shape) {
+      // use static output shape
+      const tensorflow::int64* dims = static_output_shape.data();
+      tensorflow::TensorShapeUtils::MakeShape(dims, static_output_shape.size(), &output_shape);
+    } else if (output_shape_tensor.dims() == 1) {
+      // use shape tensor values as output shape
+      TVMDSOOpTrait<DEVICE_TYPE>::make_shape_from_tensor(output_shape_tensor, &output_shape);
+    } else {
+      // use input tensor shape by default
+      output_shape = context->input(0).shape();
+    }
+
+    for (int i = 0; i < num_inputs; ++i) {
+      // Grab the input tensor
+      auto& input_tensor = context->input(i);
+
+      // Create shape container, should keep ref during execution
+      shapes[i] = input_tensor.shape().dim_sizes();
+      auto shape_ptr = reinterpret_cast<int64_t*>(shapes[i].data());
+
+      TensorAsBuf& input = buf_info[i];
+      input.device_type = device_type;
+
+      EnsureAlignment(context, input_tensor, &input);
+      input.CopyFromOrigin();
+
+      DLManagedTensor tensor;
+      status = MakeDLTensor(input, dl_ctx, shape_ptr, &args[i].dl_tensor);
+      OP_REQUIRES_OK(context, status);
+    }
+
+    // Allocate output tensor
+    tensorflow::Tensor* output_tensor;
+    OP_REQUIRES_OK(context, context->allocate_output(0, output_shape, &output_tensor));
+    // shape dimension buf should keel alive on stack
+    auto output_shape_dim_buf = output_tensor->shape().dim_sizes();
+    auto output_shape_ptr = reinterpret_cast<int64_t*>(output_shape_dim_buf.data());
+
+    TensorAsBuf output_buf;
+    output_buf.device_type = device_type;
+    EnsureAlignment(context, *output_tensor, &output_buf);
+
+    status = MakeDLTensor(output_buf, dl_ctx, output_shape_ptr, &args[num_inputs].dl_tensor);
+    OP_REQUIRES_OK(context, status);
+    NDArray output = NDArray::FromDLPack(&args[num_inputs]);
+
+    // Prepare arguments
+    for (int k = 0; k < num_inputs; ++k) {
+      NDArray arr = NDArray::FromDLPack(&args[k]);
+      char name[20];
+      snprintf(name, sizeof(name), "input_%d", k+1);
+      set_input(name, arr);
+    }
+
+    // Run it!
+    run();
+    get_output(0, output);
+
+    output_buf.CopyToOrigin();
+  }
+};
+
 #ifdef TF_TVMDSOOP_ENABLE_GPU
-REGISTER_KERNEL_BUILDER(Name("TvmDsoOp").Device(tensorflow::DEVICE_CPU), TVMDSOOp<CPUDevice>);
 REGISTER_KERNEL_BUILDER(Name("TvmDsoOp").Device(tensorflow::DEVICE_GPU), TVMDSOOp<GPUDevice>);
+REGISTER_KERNEL_BUILDER(Name("TvmDsoOp").Device(tensorflow::DEVICE_CPU), TVMDSOOp<CPUDevice>);
+REGISTER_KERNEL_BUILDER(Name("TvmDsoGraph").Device(tensorflow::DEVICE_GPU), TVMDSOGraph<GPUDevice>);
+REGISTER_KERNEL_BUILDER(Name("TvmDsoGraph").Device(tensorflow::DEVICE_CPU), TVMDSOGraph<CPUDevice>);
 #else
 REGISTER_KERNEL_BUILDER(Name("TvmDsoOp").Device(tensorflow::DEVICE_CPU), TVMDSOOp<CPUDevice>);
+REGISTER_KERNEL_BUILDER(Name("TvmDsoGraph").Device(tensorflow::DEVICE_CPU), TVMDSOGraph<CPUDevice>);
 #endif
