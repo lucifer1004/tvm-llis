@@ -361,7 +361,7 @@ class TVMDSOGraph : public OpKernel {
     int device_id = TVMDSOOpTrait<DEVICE_TYPE>::device_id(context);
     int device_type = TVMDSOOpTrait<DEVICE_TYPE>::device_type;
 
-    DLContext dl_ctx = {DLDeviceType(device_type), device_id};
+    DLDevice dl_ctx = {DLDeviceType(device_type), device_id};
 
     // Load TVM function from dynamic library
     tvm::runtime::Module gmod = mod(dl_ctx);
