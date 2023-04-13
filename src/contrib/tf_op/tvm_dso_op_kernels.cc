@@ -123,7 +123,7 @@ tensorflow::Status GetDLPackDtype(const tensorflow::Tensor& tf_tensor, DLDataTyp
   } else {
     return tensorflow::Status(tensorflow::error::INTERNAL, "Fail to get dlpack datatype");
   }
-  return tensorflow::Status::OK();
+  return tensorflow::OkStatus();
 }
 
 // Ensure buffer used for actual computation take 64byte alignment
@@ -170,7 +170,7 @@ tensorflow::Status MakeDLTensor(const TensorAsBuf& src, const DLDevice& dev, int
   out->byte_offset = 0;
   out->dtype = dlpack_type;
   out->data = src.buf + src.offset;
-  return tensorflow::Status::OK();
+  return tensorflow::OkStatus();
 }
 
 template <>
@@ -196,7 +196,7 @@ class TVMDSOOpTrait<GPUDevice> {
 
   static int device_id(OpKernelContext* context) {
     auto device_base = context->device();
-    auto gpu_device_info = device_base->tensorflow_gpu_device_info();
+    auto gpu_device_info = device_base->tensorflow_accelerator_device_info();
     return gpu_device_info->gpu_id;
   }
 
