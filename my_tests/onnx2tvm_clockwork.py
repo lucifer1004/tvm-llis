@@ -26,7 +26,8 @@ target_host = "llvm"
 
 onnx_model = onnx.load(model_path)
 
-for batch_size in [1, 2, 4, 8, 16]:
+#for batch_size in [1, 2, 4, 8, 16]:
+for batch_size in [1,]:
     change_input_dim(onnx_model, batch_size)
     input_dims[0] = batch_size
 

@@ -23,13 +23,23 @@ DEST_DIR=$2
 #python3 onnx2tvm.py ${ONNX_DIR}/squeezenet1.1-7.onnx ${DEST_DIR}/squeezenet1.1-7-cuda_llis-pack.so 'cuda -llis_flag=3' 1 3 224 224
 #python3 onnx2tvm.py ${ONNX_DIR}/inception_v3.onnx ${DEST_DIR}/inception_v3-cuda_llis-pack.so 'cuda -llis_flag=3' 1 3 224 224
 
-python3 onnx2tvm.py ${ONNX_DIR}/mnist-8.onnx ${DEST_DIR}/mnist-8-cuda-pack.so cuda 1 1 28 28
-python3 onnx2tvm.py ${ONNX_DIR}/densenet-9.onnx ${DEST_DIR}/densenet-9-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/googlenet-9.onnx ${DEST_DIR}/googlenet-9-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/mobilenetv2-7.onnx ${DEST_DIR}/mobilenetv2-7-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/resnet18-v2-7.onnx ${DEST_DIR}/resnet18-v2-7-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/resnet34-v2-7.onnx ${DEST_DIR}/resnet34-v2-7-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/resnet50-v2-7.onnx ${DEST_DIR}/resnet50-v2-7-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/squeezenet1.1-7.onnx ${DEST_DIR}/squeezenet1.1-7-cuda-pack.so cuda 1 3 224 224
-python3 onnx2tvm.py ${ONNX_DIR}/inception_v3.onnx ${DEST_DIR}/inception_v3-cuda-pack.so cuda 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/mnist-8.onnx ${DEST_DIR}/mnist-8-cuda_llis-pack.so 'cuda -llis_flag=1' 1 1 28 28
+python3 onnx2tvm.py ${ONNX_DIR}/densenet-9.onnx ${DEST_DIR}/densenet-9-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/googlenet-9.onnx ${DEST_DIR}/googlenet-9-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/mobilenetv2-7.onnx ${DEST_DIR}/mobilenetv2-7-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/resnet18-v2-7.onnx ${DEST_DIR}/resnet18-v2-7-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/resnet34-v2-7.onnx ${DEST_DIR}/resnet34-v2-7-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/resnet50-v2-7.onnx ${DEST_DIR}/resnet50-v2-7-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/squeezenet1.1-7.onnx ${DEST_DIR}/squeezenet1.1-7-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+python3 onnx2tvm.py ${ONNX_DIR}/inception_v3.onnx ${DEST_DIR}/inception_v3-cuda_llis-pack.so 'cuda -llis_flag=1' 1 3 224 224
+
+#python3 onnx2tvm.py ${ONNX_DIR}/mnist-8.onnx ${DEST_DIR}/mnist-8-cuda-pack.so cuda 1 1 28 28
+#python3 onnx2tvm.py ${ONNX_DIR}/densenet-9.onnx ${DEST_DIR}/densenet-9-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/googlenet-9.onnx ${DEST_DIR}/googlenet-9-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/mobilenetv2-7.onnx ${DEST_DIR}/mobilenetv2-7-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/resnet18-v2-7.onnx ${DEST_DIR}/resnet18-v2-7-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/resnet34-v2-7.onnx ${DEST_DIR}/resnet34-v2-7-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/resnet50-v2-7.onnx ${DEST_DIR}/resnet50-v2-7-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/squeezenet1.1-7.onnx ${DEST_DIR}/squeezenet1.1-7-cuda-pack.so cuda 1 3 224 224
+#python3 onnx2tvm.py ${ONNX_DIR}/inception_v3.onnx ${DEST_DIR}/inception_v3-cuda-pack.so cuda 1 3 224 224
 
