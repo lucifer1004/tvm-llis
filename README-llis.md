@@ -2,9 +2,9 @@
 
 ## Build
 
-Follow the instruction of the original TVM. It should be built with CUDA and LLVM support.
+Follow the instruction of the original TVM. It should be built with CUDA and LLVM support. To do that, modify config.cmake to change `set(USE_CUDA OFF)` to `set(USE_CUDA ON)` and `set(USE_LLVM OFF)` to `set(USE_LLVM ON)`.
 
-To enable LLIS support, add the following to config.cmake:
+Also, add the following to config.cmake to enable LLIS support:
 ```
 set(USE_LLIS /path/to/llis)
 ```
