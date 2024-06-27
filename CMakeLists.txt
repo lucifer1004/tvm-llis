@@ -118,11 +118,14 @@ tvm_option(USE_UMA "Build with UMA support" OFF)
 # include directories
 include_directories(${CMAKE_INCLUDE_PATH})
 include_directories("include")
+include_directories(../target/include)
 include_directories(SYSTEM ${DLPACK_PATH})
 include_directories(SYSTEM ${DMLC_PATH})
 include_directories(SYSTEM ${RANG_PATH})
 include_directories(SYSTEM ${COMPILER_RT_PATH})
 include_directories(SYSTEM ${PICOJSON_PATH})
+
+link_directories(../target/lib)
 
 # initial variables
 set(TVM_LINKER_LIBS "")
