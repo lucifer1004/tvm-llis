@@ -78,6 +78,12 @@ def compile_cuda(code, target_format="ptx", arch=None, options=None, path_target
     file_target = path_target if path_target else temp_target
     cmd = ["nvcc"]
     cmd += ["--%s" % target_format, "-O3"]
+    
+    # # Need to use the following hack to convert ONNX models
+    # cmd += ["-I/home/zihuaw/com.github/eniac/paella/target/include"]
+    # cmd += ["-L/home/zihuaw/com.github/eniac/paella/target/lib"]
+    # cmd += ["-lllis_job_gpu", "-lllis_context"]
+    
     if isinstance(arch, list):
         cmd += arch
     elif isinstance(arch, str):
